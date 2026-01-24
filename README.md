@@ -9,3 +9,5 @@ The largest earthquake of last 5 days had magnitude 7.7 and was located at 124km
 ```
 
 Note that the project requires the ```json``` and ```requests``` module to run. Note also that USGS limits the maximum number of events returned to 20000, so that it may be useless to query  for events that have an age of more than a few days, as only the lastest 20000 events will be returned.
+
+Edited by Neeti
