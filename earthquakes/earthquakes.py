@@ -22,3 +22,57 @@ def get_earthquake(days_past):
             magnitude = mag
             place = event['properties']['place']
     return magnitude, place
+
+import csv
+import requests
+from datetime import datetime, timedelta
+
+
+def read_bounding_box():
+    with open('bounding_box.csv', newline = '') as file:
+        reader = csv.reader(file)
+        keys = next(reader)
+        values = next(reader)
+    return {k:float(v) for k,v in zip(keys, values)}
+
+
+def gather_earthquakes(days):
+    url = "https://webservices.ingv.it/fdsnws/event/1/query?"
+
+    bounding_box = read_bounding_box()
+    from datetime import timezone
+    endtime = datetime.now(timezone.utc)
+    starttime = endtime - timedelta(days=days)
+
+    params = {
+        "format": "geojson",
+        "starttime": starttime.strftime("%Y-%m-%dT%H:%M:%S"),
+        "endtime": endtime.strftime("%Y-%m-%dT%H:%M:%S"),
+        "minlatitude": bounding_box["minlatitude"],
+        "maxlatitude": bounding_box["maxlatitude"],
+        "minlongitude": bounding_box["minlongitude"],
+        "maxlongitude": bounding_box["maxlongitude"],
+    }
+
+    response = requests.get(url, params=params)
+    events = response.json()
+
+    earthquakes = []
+    for event in events['features']:
+        props = event['properties']
+        geom = event['geometry']
+
+        t = datetime.strptime(props['time'], "%Y-%m-%dT%H:%M:%S.%f")
+        day = t.strftime("%Y-%m-%d")
+        time = t.strftime("%H:%M:%S")
+
+        magnitude = props['mag']
+        place = props.get('place',"")
+
+        longitude = geom['coordinates'][0]
+        latitude = geom['coordinates'][1]
+        earthquakes.append(
+            (day, time, magnitude, latitude, longitude, place)
+        )
+    return earthquakes
+
