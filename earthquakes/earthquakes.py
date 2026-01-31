@@ -76,3 +76,38 @@ def gather_earthquakes(days):
         )
     return earthquakes
 
+import sqlite3
+def create_earthquake_db(earthquakes, db_path='earthquakes.db'):
+    """
+    Create an SQL Database and stores earthquakes record.
+    'earthquakes' must be a list of tuples (day, time, magnitude, latitude, longitude, place)
+    """
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+
+
+    create_sql = """
+    CREATE TABLE IF NOT EXISTS earthquakes_db(
+        day TEXT,
+        time TEXT, 
+        mag REAL, 
+        latitude REAL, 
+        longitude REAL, 
+        place TEXT
+    ); 
+    """
+    cursor.execute(create_sql)
+
+
+    conn.commit()
+
+    insert_sql = (
+        "INSERT INTO earthquakes_db (day, time, mag, latitude, longitude, place) "
+        "VALUES (?, ?, ?, ?, ?, ?)"
+    )
+
+
+    cursor.executemany(insert_sql, earthquakes)
+    conn.commit()
+    cursor.close()
+    conn.close()
