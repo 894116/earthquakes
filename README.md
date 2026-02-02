@@ -12,4 +12,6 @@ Note that the project requires the ```json``` and ```requests``` module to run. 
 
 Edited by Neeti
 
-Resolved the test issue.
+Resolved the test issue. 
+
+closes #10
