@@ -2,6 +2,11 @@ import requests
 import datetime
 import json
 
+BOUNDING_BOX_CSV = "bounding_box.csv"
+
+def get_bounding_box_names():
+    #only one bounding box is defined in this lab
+    return ["italy"]
 
 USGS_URL = 'https://earthquake.usgs.gov/fdsnws/event/1/query?starttime={}&format=geojson&limit=20000'
 
@@ -34,8 +39,12 @@ def read_bounding_box():
         values = next(reader)
     return {k:float(v) for k,v in zip(keys, values)}
 
+def read_bounding_box_from_boxes(box_name):
+    # since you currently only have one box, ignore box_name
+    return read_bounding_box()
 
-def gather_earthquakes(days):
+def gather_earthquakes(days, box_name="italy"):
+    bounding_box = read_bounding_box_from_boxes(box_name)
     url = "https://webservices.ingv.it/fdsnws/event/1/query?"
 
     bounding_box = read_bounding_box()
@@ -156,3 +165,37 @@ def print_earthquakes(earthquakes):
             f"day: {day}, time: {time}, magnitude: {mag},\n"
             f"lat: {latitude}, lon: {longitude}, place: {place}"
         )
+
+def get_bounding_box_names(csv_path="bounding_box.csv"):
+    names = []
+    with open(csv_path, newline="") as file:
+        reader = csv.DictReader(file)
+        for row in reader:
+            names.append(row["name"])
+    return names
+
+
+import csv
+
+BOUNDING_BOX_CSV = "bounding_box.csv"
+
+
+def get_bounding_box_names():
+    with open(BOUNDING_BOX_CSV, newline="") as file:
+        reader = csv.DictReader(file)
+        return [row["name"] for row in reader]
+
+
+def read_bounding_box(box_name):
+    with open(BOUNDING_BOX_CSV, newline="") as file:
+        reader = csv.DictReader(file)
+        for row in reader:
+            if row["name"] == box_name:
+                return {
+                    "minlatitude": float(row["minlatitude"]),
+                    "maxlatitude": float(row["maxlatitude"]),
+                    "minlongitude": float(row["minlongitude"]),
+                    "maxlongitude": float(row["maxlongitude"]),
+                }
+
+    raise ValueError(f"Bounding box '{box_name}' not found")
