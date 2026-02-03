@@ -1,38 +1,23 @@
 """
 main.py
 
-Command-line interface to fetch earthquakes, store them into SQLite,
-and query the database.
+Command-line interface to:
+1) fetch earthquakes (last N days) and store them into SQLite
+2) query the database and print results
 """
 
 import argparse
 
-from earthquakes.earthquakes import (
-    create_earthquake_db,
-    gather_earthquakes,
-    print_earthquakes,
-    query_db,
-    read_bounding_box,
-)
+from earthquakes.earthquakes import create_earthquake_db, print_earthquakes, query_db
 
 
 def main() -> None:
-    """
-    Run the CLI workflow.
-
-    Steps:
-    1) Read bounding box from CSV
-    2) Fetch earthquakes from INGV
-    3) Store results into SQLite
-    4) Query and print the top earthquakes
-    """
+    """Parse CLI args, build DB, query DB, print results."""
     parser = argparse.ArgumentParser(
-        description=(
-            "Fetch earthquakes, store them in SQLite, then query the database."
-        )
+        description="Fetch earthquakes, store them in SQLite, then query results."
     )
-    parser.add_argument("--K", type=int, required=True, help="Number of results.")
-    parser.add_argument("--days", type=int, required=True, help="Look back N days.")
+    parser.add_argument("--K", type=int, required=True, help="Number of results to show.")
+    parser.add_argument("--days", type=int, required=True, help="Look back window in days.")
     parser.add_argument(
         "--min-magnitude",
         type=float,
@@ -42,10 +27,10 @@ def main() -> None:
 
     args = parser.parse_args()
 
-    bounding_box = read_bounding_box()
-    earthquakes = gather_earthquakes(args.days, bounding_box)
-    create_earthquake_db(earthquakes)
+    # Step 1: build/refresh database for the chosen time window
+    create_earthquake_db(args.days)
 
+    # Step 2: query and print
     results = query_db(args.K, args.days, args.min_magnitude)
     print_earthquakes(results)
 
