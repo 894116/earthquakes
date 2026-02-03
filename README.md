@@ -1,17 +1,20 @@
 # Earthquakes Project
 
 This project is a Python-based application for fetching, processing and storing earthquake data.
-It integrates data from two different seismic data sources: **USGS** (https://earthquake.usgs.gov/fdsnws/event/1/) for global earthquakes and **INGV** (https://webservices.ingv.it/fdsnws/event/1/query?) for Italian earthquakes. 
+It integrates data from two different seismic data sources: 
+- **USGS** (https://earthquake.usgs.gov/fdsnws/event/1/) for global earthquakes; used by the function `get_earthquake(days_past)`, which retrieves the strongest earthquake worldwide over a given number of past days. This function is part of the original code provided with the repository and is kept for completeness.
+- **INGV** (https://webservices.ingv.it/fdsnws/event/1/query?) for Italian earthquakes; used for the main part of the project developed in this assignment.  Earthquakes occurring within an Italian geographic bounding box are collected, stored in an SQLite database, and queried to retrieve the strongest events.
 
+The main program (`main.py`) focuses on the INGV-based workflow.
 
 ## Repository Structure
-**earthquakes/earthquakes.py** - Core module containing all functions for fetching earthqaukes (USGS + INGV), reading bounding boxes, creating the SQLite database, querying it, and printing results. 
+**earthquakes/earthquakes.py** - Core module containing the main functions for fetching earthquake data, reading the bounding box, creating the SQLite database, querying it, and printing results.
 
-**main.py** - Command-line interface that fetchs earthquakes for a selected region, stores them in the database and prints the top K earthquakes.
+**main.py** - Command-line interface that runs the main workflow: fetching earthquakes, storing them in the database, and printing the top K events.
 
-**write_bouding_box.py + bounding_box.csv** - Utility script and corresponding CSV file defining the geographiv bounding box used to filter INGV earthquakes queries (currently on Italy).
+**write_bouding_box.py + bounding_box.csv** - Utility script and corresponding CSV file defining the geographiv bounding box used to filter INGV earthquakes queries (currently Italy).
 
-## Features
+
 
 
 This repository contains a file named ```earthquakes.py``` that implements the ```get_earthquake(past_days)``` function. It queries the [USGS](https://earthquake.usgs.gov/fdsnws/event/1/) website to fetch the list of earthquakes registered in the last ```past_days``` days around the world and returns the one with the highest magnitude.
