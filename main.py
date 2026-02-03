@@ -1,35 +1,54 @@
+"""
+main.py
+
+Command-line interface to fetch earthquakes, store them into SQLite,
+and query the database.
+"""
+
 import argparse
+
 from earthquakes.earthquakes import (
-    gather_earthquakes,
     create_earthquake_db,
-    query_db,
+    gather_earthquakes,
     print_earthquakes,
-    get_bounding_box_names,
+    query_db,
+    read_bounding_box,
 )
 
-def main():
-    box_choices = get_bounding_box_names()
 
+def main() -> None:
+    """
+    Run the CLI workflow.
+
+    Steps:
+    1) Read bounding box from CSV
+    2) Fetch earthquakes from INGV
+    3) Store results into SQLite
+    4) Query and print the top earthquakes
+    """
     parser = argparse.ArgumentParser(
-        description="Fetch earthquakes, store them in SQLite, then query the database."
+        description=(
+            "Fetch earthquakes, store them in SQLite, then query the database."
+        )
     )
-
-    parser.add_argument("--K", type=int, required=True)
-    parser.add_argument("--days", type=int, required=True)
-    parser.add_argument("--min-magnitude", type=float, required=True)
-    parser.add_argument("--box", required=True, choices=box_choices)
+    parser.add_argument("--K", type=int, required=True, help="Number of results.")
+    parser.add_argument("--days", type=int, required=True, help="Look back N days.")
+    parser.add_argument(
+        "--min-magnitude",
+        type=float,
+        required=True,
+        help="Minimum magnitude threshold.",
+    )
 
     args = parser.parse_args()
 
-    # 1) Fetch earthquakes for the selected region + days
-    earthquakes = gather_earthquakes(args.days, box_name=args.box)
-
-    # 2) Create DB + insert records (creates table earthquakes_db if missing)
+    bounding_box = read_bounding_box()
+    earthquakes = gather_earthquakes(args.days, bounding_box)
     create_earthquake_db(earthquakes)
 
-    # 3) Query DB + print results
     results = query_db(args.K, args.days, args.min_magnitude)
     print_earthquakes(results)
+
 
 if __name__ == "__main__":
     main()

@@ -1,54 +1,110 @@
-import requests
-import datetime
-import json
+"""
+earthquakes.py
 
-BOUNDING_BOX_CSV = "bounding_box.csv"
+Utilities to fetch earthquake events from the INGV service, store them into an
+SQLite database, and query the stored records.
 
-def get_bounding_box_names():
-    #only one bounding box is defined in this lab
-    return ["italy"]
+The bounding box is read from a CSV file (default: bounding_box.csv) with the
+following header:
 
-USGS_URL = 'https://earthquake.usgs.gov/fdsnws/event/1/query?starttime={}&format=geojson&limit=20000'
-
-def get_earthquake(days_past):
-    #get the date of today - days_past days at 00 AM
-    start_date = (datetime.datetime.now() + datetime.timedelta(days=-days_past)).strftime("%Y-%m-%d")
-    url = USGS_URL.format(start_date)
-    r = requests.get(url)
-    events = json.loads(requests.get(url).text)
-    magnitude = 0
-    place = ''
-    for event in events['features']:
-        try:
-            mag = float(event['properties']['mag'])
-        except TypeError:
-            pass
-        if mag > magnitude:
-            magnitude = mag
-            place = event['properties']['place']
-    return magnitude, place
+minlatitude,maxlatitude,minlongitude,maxlongitude
+"""
 
 import csv
+import sqlite3
+from datetime import datetime, timedelta, timezone
+from typing import Dict, List, Tuple
+
 import requests
-from datetime import datetime, timedelta
 
-def read_bounding_box():
-    with open('bounding_box.csv', newline = '') as file:
+
+DB_DEFAULT_PATH = "earthquakes.db"
+BOUNDING_BOX_CSV = "bounding_box.csv"
+INGV_URL = "https://webservices.ingv.it/fdsnws/event/1/query"
+
+EarthquakeRow = Tuple[str, str, float, float, float, str]
+
+
+def read_bounding_box(csv_path: str = BOUNDING_BOX_CSV) -> Dict[str, float]:
+    """
+    Read a bounding box from a CSV file.
+
+    The CSV file must contain exactly two rows:
+    1) header: minlatitude,maxlatitude,minlongitude,maxlongitude
+    2) values: numeric values for the bounding box
+
+    Parameters
+    ----------
+    csv_path : str
+        Path to the CSV file.
+
+    Returns
+    -------
+    dict
+        Dictionary with keys:
+        minlatitude, maxlatitude, minlongitude, maxlongitude.
+
+    Raises
+    ------
+    FileNotFoundError
+        If the CSV file does not exist.
+    ValueError
+        If the CSV is malformed or values cannot be parsed as floats.
+    """
+    required_keys = {
+        "minlatitude",
+        "maxlatitude",
+        "minlongitude",
+        "maxlongitude",
+    }
+
+    with open(csv_path, newline="", encoding="utf-8") as file:
         reader = csv.reader(file)
-        keys = next(reader)
-        values = next(reader)
-    return {k:float(v) for k,v in zip(keys, values)}
+        try:
+            keys = next(reader)
+            values = next(reader)
+        except StopIteration as exc:
+            raise ValueError("bounding_box.csv must have a header and one row.") from exc
 
-def read_bounding_box_from_boxes(box_name):
-    # since you currently only have one box, ignore box_name
-    return read_bounding_box()
+    if set(keys) != required_keys:
+        raise ValueError(
+            "bounding_box.csv header must be exactly: "
+            "minlatitude,maxlatitude,minlongitude,maxlongitude"
+        )
 
-def gather_earthquakes(days, box_name="italy"):
-    bounding_box = read_bounding_box_from_boxes(box_name)
-    url = "https://webservices.ingv.it/fdsnws/event/1/query?"
+    try:
+        bounding_box = {k: float(v) for k, v in zip(keys, values)}
+    except ValueError as exc:
+        raise ValueError("Bounding box values must be numeric floats.") from exc
 
-    bounding_box = read_bounding_box()
-    from datetime import timezone
+    return bounding_box
+
+
+def gather_earthquakes(days: int, bounding_box: Dict[str, float]) -> List[EarthquakeRow]:
+    """
+    Fetch earthquakes from INGV within the given bounding box for the last N days.
+
+    Parameters
+    ----------
+    days : int
+        How many days back from now (UTC) to query.
+    bounding_box : dict
+        Bounding box coordinates with keys:
+        minlatitude, maxlatitude, minlongitude, maxlongitude.
+
+    Returns
+    -------
+    list
+        List of tuples:
+        (day, time, magnitude, latitude, longitude, place)
+
+    Raises
+    ------
+    requests.RequestException
+        If the HTTP request fails.
+    ValueError
+        If the response JSON is not in the expected format.
+    """
     endtime = datetime.now(timezone.utc)
     starttime = endtime - timedelta(days=days)
 
@@ -62,140 +118,161 @@ def gather_earthquakes(days, box_name="italy"):
         "maxlongitude": bounding_box["maxlongitude"],
     }
 
-    response = requests.get(url, params=params)
-    events = response.json()
+    response = requests.get(INGV_URL, params=params, timeout=30)
+    response.raise_for_status()
+    data = response.json()
 
-    earthquakes = []
-    for event in events['features']:
-        props = event['properties']
-        geom = event['geometry']
+    features = data.get("features")
+    if not isinstance(features, list):
+        raise ValueError("Unexpected INGV response: 'features' is missing or invalid.")
 
-        t = datetime.strptime(props['time'], "%Y-%m-%dT%H:%M:%S.%f")
+    earthquakes: List[EarthquakeRow] = []
+    for event in features:
+        props = event.get("properties", {})
+        geom = event.get("geometry", {})
+        coords = geom.get("coordinates", [])
+
+        # Defensive parsing: skip incomplete records
+        time_raw = props.get("time")
+        mag_raw = props.get("mag")
+        if time_raw is None or mag_raw is None or len(coords) < 2:
+            continue
+
+        try:
+            t = datetime.strptime(time_raw, "%Y-%m-%dT%H:%M:%S.%f")
+            magnitude = float(mag_raw)
+            longitude = float(coords[0])
+            latitude = float(coords[1])
+        except (ValueError, TypeError):
+            continue
+
         day = t.strftime("%Y-%m-%d")
-        time = t.strftime("%H:%M:%S")
+        time_str = t.strftime("%H:%M:%S")
+        place = props.get("place", "")
 
-        magnitude = props['mag']
-        place = props.get('place',"")
+        earthquakes.append((day, time_str, magnitude, latitude, longitude, place))
 
-        longitude = geom['coordinates'][0]
-        latitude = geom['coordinates'][1]
-        earthquakes.append(
-            (day, time, magnitude, latitude, longitude, place)
-        )
     return earthquakes
 
-import sqlite3
-def create_earthquake_db(earthquakes, db_path='earthquakes.db'):
+
+def create_earthquake_db(
+    earthquakes: List[EarthquakeRow],
+    db_path: str = DB_DEFAULT_PATH,
+) -> None:
     """
-    Create an SQL Database and stores earthquakes record.
-    'earthquakes' must be a list of tuples (day, time, magnitude, latitude, longitude, place)
+    Create (if missing) and populate the earthquakes SQLite database.
+
+    Parameters
+    ----------
+    earthquakes : list
+        List of earthquake rows:
+        (day, time, magnitude, latitude, longitude, place)
+    db_path : str
+        SQLite database path.
+
+    Returns
+    -------
+    None
     """
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
 
-
-    create_sql = """
-    CREATE TABLE IF NOT EXISTS earthquakes_db(
-        day TEXT,
-        time TEXT, 
-        mag REAL, 
-        latitude REAL, 
-        longitude REAL, 
-        place TEXT
-    ); 
-    """
-    cursor.execute(create_sql)
-
-    cursor.execute("""
-    CREATE UNIQUE INDEX IF NOT EXISTS uq_earthquakes
-    ON earthquakes_db (day, time, mag, latitude, longitude, place);
-    """)
-
-    conn.commit()
-
-    insert_sql = (
-        "INSERT OR IGNORE INTO earthquakes_db (day, time, mag, latitude, longitude, place) "
-        "VALUES (?, ?, ?, ?, ?, ?)"
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS earthquakes_db(
+            day TEXT,
+            time TEXT,
+            mag REAL,
+            latitude REAL,
+            longitude REAL,
+            place TEXT
+        );
+        """
     )
 
+    cursor.execute(
+        """
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_earthquakes
+        ON earthquakes_db(day, time, mag, latitude, longitude, place);
+        """
+    )
 
-    cursor.executemany(insert_sql, earthquakes)
-
-    cursor.execute("""
-    DELETE FROM earthquakes_db
-    WHERE rowid NOT IN (
-        SELECT MIN(rowid)
-        FROM earthquakes_db
-        GROUP BY day, time, mag, latitude, longitude, place
-    );
-    """)
+    cursor.executemany(
+        """
+        INSERT OR IGNORE INTO earthquakes_db(day, time, mag, latitude, longitude, place)
+        VALUES (?, ?, ?, ?, ?, ?);
+        """,
+        earthquakes,
+    )
 
     conn.commit()
     cursor.close()
     conn.close()
 
 
-def query_db(K, days, min_magnitude, db_path='earthquakes.db'):
+def query_db(
+    k: int,
+    days: int,
+    min_magnitude: float,
+    db_path: str = DB_DEFAULT_PATH,
+) -> List[EarthquakeRow]:
+    """
+    Query stored earthquakes from the database.
+
+    Parameters
+    ----------
+    k : int
+        Maximum number of results to return.
+    days : int
+        Only return earthquakes in the last N days.
+    min_magnitude : float
+        Only return earthquakes with magnitude >= min_magnitude.
+    db_path : str
+        SQLite database path.
+
+    Returns
+    -------
+    list
+        List of earthquake rows sorted by magnitude descending.
+    """
+    date_limit = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%d")
+
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
-
-    date_limit = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
 
     cursor.execute(
         """
         SELECT day, time, mag, latitude, longitude, place
         FROM earthquakes_db
         WHERE mag >= ?
-            AND day >= ?
+          AND day >= ?
         ORDER BY mag DESC
-        LIMIT ?
+        LIMIT ?;
         """,
-        (min_magnitude, date_limit, K)
+        (min_magnitude, date_limit, k),
     )
 
     results = cursor.fetchall()
+    cursor.close()
     conn.close()
     return results
 
-def print_earthquakes(earthquakes):
-    for eq in earthquakes:
-        day, time, mag, latitude, longitude, place = eq
 
+def print_earthquakes(earthquakes: List[EarthquakeRow]) -> None:
+    """
+    Print earthquake records in a readable format.
+
+    Parameters
+    ----------
+    earthquakes : list
+        Earthquake rows.
+
+    Returns
+    -------
+    None
+    """
+    for day, time_str, mag, lat, lon, place in earthquakes:
         print(
-            f"day: {day}, time: {time}, magnitude: {mag},\n"
-            f"lat: {latitude}, lon: {longitude}, place: {place}"
+            f"day: {day}, time: {time_str}, magnitude: {mag}\n"
+            f"lat: {lat}, lon: {lon}, place: {place}\n"
         )
-
-def get_bounding_box_names(csv_path="bounding_box.csv"):
-    names = []
-    with open(csv_path, newline="") as file:
-        reader = csv.DictReader(file)
-        for row in reader:
-            names.append(row["name"])
-    return names
-
-
-import csv
-
-BOUNDING_BOX_CSV = "bounding_box.csv"
-
-
-def get_bounding_box_names():
-    with open(BOUNDING_BOX_CSV, newline="") as file:
-        reader = csv.DictReader(file)
-        return [row["name"] for row in reader]
-
-
-def read_bounding_box(box_name):
-    with open(BOUNDING_BOX_CSV, newline="") as file:
-        reader = csv.DictReader(file)
-        for row in reader:
-            if row["name"] == box_name:
-                return {
-                    "minlatitude": float(row["minlatitude"]),
-                    "maxlatitude": float(row["maxlatitude"]),
-                    "minlongitude": float(row["minlongitude"]),
-                    "maxlongitude": float(row["maxlongitude"]),
-                }
-
-    raise ValueError(f"Bounding box '{box_name}' not found")
