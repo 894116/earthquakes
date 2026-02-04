@@ -24,20 +24,26 @@ The application performs the following steps:
 
 **test_project.py** - Test suite implemented using Python’s `unittest` framework to validate the main functionalities of the project.
 
+## How the program works
+The core logic of the project is implemented in the file `earthquakes/earthquakes.py`.
+This module handles the entire earthquake data pipeline: it reads the geographic bounding box from a CSV file, fetches earthquake events from the INGV web service within the selected time window, stores the data in an SQLite database, and allows querying the strongest earthquakes based on user-defined parameters.
 
+The main entry point of the project is `main.py`, which provides a command-line interface to run the complete workflow.
 
-This repository contains a file named ```earthquakes.py``` that implements the ```get_earthquake(past_days)``` function. It queries the [USGS](https://earthquake.usgs.gov/fdsnws/event/1/) website to fetch the list of earthquakes registered in the last ```past_days``` days around the world and returns the one with the highest magnitude.
-If you run the program, executing the main file with: ```python main.py``` it will  give you results similar to the following: 
+If you run the program from the command line, you can specify:
+- how many days in the past to look back,
+- the minimum magnitude threshold,
+- and the number of strongest earthquakes to display.
 
+For example, running:
 ```
-$ python main.py
-The largest earthquake of last 5 days had magnitude 7.7 and was located at 124km NNW of Lucea, Jamaica
+python main.py --days 7 --min_magnitude 3.0 --K 5
 ```
 
-Note that the project requires the ```json``` and ```requests``` module to run. Note also that USGS limits the maximum number of events returned to 20000, so that it may be useless to query  for events that have an age of more than a few days, as only the lastest 20000 events will be returned.
+will fetch earthquakes from the last 7 days within the Italian bounding box, store them in the dataset, and print the top5 strongest events with magnitude grater than ore equal to 3.0.
 
-Edited by Neeti
+The results are printed in readable format, including date, time, magnitude, location, and geographic coordinates.
 
-Resolved the test issue. 
+## Requirements
 
-closes #10
+The project relies on standard Python libraries such as `datetime`, `csv`, `sqlite3`, and `argparse`, and uses the external `requests` module to retrieve earthquake data from the INGV web service.
