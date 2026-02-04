@@ -1,18 +1,19 @@
 # Earthquakes Project
 
 This project is a Python-based application for fetching, processing and storing earthquake data.
-It integrates data from **INGV** services (https://webservices.ingv.it/fdsnws/event/1/query?) for Italian earthquakes; used for the main part of the project developed in this assignment.  Earthquakes occurring within an Italian geographic bounding box are collected, stored in an SQLite database, and queried to retrieve the strongest events.
+It uses data from **INGV** services (https://webservices.ingv.it/fdsnws/event/1/query?) and focuses on Italian earthquakes; 
+Earthquakes occurring within an Italian geographic bounding box are collected, stored in an SQLite database, and queried to retrieve the strongest events.
 
 ## Project Overview
 
 The application performs the following steps:
 
-1. Reads a geographic bounding box from a CSV file
-2. Fetches earthquake data from INGV for the last *N* days
-3. Stores the data in a local SQLite database
-4. Queries the database to retrieve the strongest earthquakes
-5. Prints the results in a readable format
-6. Provides a minimal unittest suite to validate the main logic
+- Reads a geographic bounding box from a CSV file
+- Fetches earthquake data from INGV for the last *N* days
+- Stores the data in a local SQLite database
+- Queries the database to retrieve the strongest earthquakes
+- Prints the results in a readable format
+- Provides a minimal unittest suite to validate the main logic
 
 
 ## Main files
@@ -40,7 +41,7 @@ For example, running:
 python main.py --days 7 --min_magnitude 3.0 --K 5
 ```
 
-will fetch earthquakes from the last 7 days within the Italian bounding box, store them in the dataset, and print the top5 strongest events with magnitude grater than ore equal to 3.0.
+will fetch earthquakes from the last 7 days within the Italian bounding box, store them in the database, and print the top 5 strongest events with magnitude greater than or equal to 3.0.
 
 The results are printed in readable format, including date, time, magnitude, location, and geographic coordinates.
 
